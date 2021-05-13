@@ -1,0 +1,314 @@
+---
+title: "Assignment Part 1 -Song Bird Analysis"
+author: "Sheena Davis"
+date: "09/05/2021"
+output: html_document
+---
+This analysis was conducted in three part; the first part examined and compared the calls and songs of the European Robin while the second part compared the calls of European Robins with two other common garden birds.Finally, the third section compared the songs of European Robins with the songs of other members of the Subfamily _Erithacinae_. 
+
+## Script set up 
+To begin the necessary packages needed for this analysis were installed and the libraries were called.
+
+```
+necessary.packages<-c("devtools","behaviouR","tuneR","seewave","ggplot2","dplyr",
+                      "warbleR","leaflet","lubridate","sp","sf","raster","mapview",
+                      "leafem","BIRDS","xts","zoo", "stringr","vegan","rmarkdown","shiny")
+
+already.installed <- necessary.packages%in%installed.packages()[,'Package'] #asks if the necessary packages are already installed
+if (length(necessary.packages[!already.installed])>=1) { #if not installed download now
+  install.packages(necessary.packages[!already.installed],dep=1)
+}
+sapply(necessary.packages, function(p){require(p,quietly = T,character.only = T)})
+```
+```{r, echo= FALSE, results=FALSE, warning=FALSE, message=FALSE}
+necessary.packages<-c("devtools","behaviouR","tuneR","seewave","ggplot2","dplyr",
+                      "warbleR","leaflet","lubridate","sp","sf","raster","mapview",
+                      "leafem","BIRDS","xts","zoo", "stringr","vegan","rmarkdown","shiny")
+
+already.installed <- necessary.packages%in%installed.packages()[,'Package'] #asks if the necessary packages are already installed
+if (length(necessary.packages[!already.installed])>=1) { #if not installed download now
+  install.packages(necessary.packages[!already.installed],dep=1)
+}
+sapply(necessary.packages, function(p){require(p,quietly = T,character.only = T)})
+```
+
+## Part 1
+### Section 1 
+
+Part one analysed the calls and songs of the European Robin (_Erithacus rubecula_). Calls and songs were downloaded from xeno-canto and read into files prior to the analysis.
+
+First the presence of recordings was checked for using the function query_xc() and stored as an object. The option 'download = FALSE' prevents the .MP3 records from being downloaded.
+```
+robin_song <-query_xc(qword = 'Erithacus rubecula cnt:"united kingdom" type:song len:5-25', download = FALSE)
+robin_call<-query_xc(qword = 'Erithacus rubecula cnt:"united kingdom" type:call len:5-25', download = FALSE)
+```
+Next sub-folders were created in the RStudio Project for song calls and calls. Duplicates of each sound type were made as they would be used in multiple analyses. 
+```
+dir.create(file.path("robin_song"))
+dir.create(file.path("robin_song2"))
+dir.create(file.path("robin_call"))
+dir.create(file.path("robin_call2"))
+```
+For each folder the required .MP3 records were downloaded using the following line of code, substituting the relevant folder name with the desired sound name. 
+```
+query_xc(X = robin_song, path="robin_song")
+```
+Using the _stringr_ package, the structure of the names of the .MP3 files was changed using the code below. This allowed for more succinct file names. All 4 folders of robin files were changed using this code by simply substituting the folder name for each seperate folder.
+```
+old_files <- list.files("robin_song", full.names=TRUE)
+new_files <- NULL
+for(file in 1:length(old_files)){
+  curr_file <- str_split(old_files[file], "-")
+  new_name <- str_c(c(curr_file[[1]][1:2], "-song_", curr_file[[1]][3]), collapse="")
+  new_files <- c(new_files, new_name)
+}
+file.rename(old_files, new_files)
+```
+Next the folders called robin_song and robin_call were copied into a new sub-folder entitled robin_audio. The duplicates of these files robin_call2 and robin_song2 will be used in a later analysis. 
+```
+dir.create(file.path("robin_audio"))
+file.copy(from=paste0("robin_song/",list.files("robin_song")),
+          to="robin_audio")
+file.copy(from=paste0("robin_call/",list.files("robin_call")),
+          to="robin_audio")
+```
+Finally the .MP3 files were converted into .WAV files.The .MP3 files were then removed to save disk space. This was achieved using the following code: 
+```
+mp32wav(path="robin_audio", dest.path="robin_audio")
+unwanted_mp3 <- dir(path="robin_audio", pattern="*.mp3")
+file.remove(paste0("robin_audio/", unwanted_mp3))
+```
+
+### Section 2 
+
+To visualize the differences in bird calls an oscillogram can be used.The difference between Robin alarm calls and songs can then be visualized,this is achieved using the oscillo() function. 
+```
+robin_wav<- readWave("robin_audio/Erithacusrubecula-song_374144.wav")
+robin_wav
+oscillo(robin_wav)
+```
+```{r, echo=FALSE}
+library(tuneR)
+library(seewave)
+robin_wav<- readWave("robin_audio/Erithacusrubecula-song_374144.wav")
+
+oscillo(robin_wav)
+
+```
+
+The wave can also be set for a specific time, for example; the plot below shows a small section of the wave from 0.59 to 0.60, which was achieved by the following code;
+```
+oscillo(robin_wav, from = 0.59, to = 0.60)
+```
+```{r, echo=FALSE}
+library(tuneR)
+library(seewave)
+robin_wav<- readWave("robin_audio/Erithacusrubecula-song_374144.wav")
+oscillo(robin_wav, from = 0.59, to = 0.60)
+```
+
+The wave can also be visualised using a spectogram. As shown by the code below;
+```
+SpectrogramSingle(sound.file = "robin_audio/Erithacusrubecula-song_374144.wav",
+                  Colors = "Colors")
+```
+Next the robin call recordings were visualised in the same way as the robin song recording above, this was to ascertain whether or not there is variation between the two sounds. The following two figures show the full sound wave of a robin call and a section of that same call from 0.59-0.60. Compared to the sound wave of the robin song shown above, it is clear that the two sounds differ greatly. 
+
+```{r, echo=FALSE}
+library(tuneR)
+library(seewave)
+
+robinc_wav<- readWave("robin_audio/Erithacusrubecula-call_70122.wav")
+oscillo(robinc_wav)
+oscillo(robinc_wav, from = 0.59, to = 0.60)
+```
+
+### Section 3
+
+To further investigate the variation between the calls a principal component analysis (PCA) was carried out. Before the PCA was carried out the data was simplified by pushing it through Mel-frequency cepstral coefficients (MFCC), which identifies repeated patterns and extracts them to form a simplified data set that can be used in the PCA.An MFCC can be applied simply by using the MFCCfunction().
+
+```
+
+robin_mfcc <- MFCCFunction(input.dir = "robin_audio",
+                               max.freq=7000)
+```
+To run the PCA, a source script nes8010.R with previously created functions necessary for the PCA was used.
+```
+robin_pca <- ordi_pca(robin_mfcc[, -1], scale=TRUE)
+summary(robin_pca)
+
+robin_sco <- ordi_scores(robin_pca, display="sites")
+robin_sco <- mutate(robin_sco, group_code = robin_mfcc$Class)
+
+ggplot(robin_sco, aes(x=PC1, y=PC2, colour=group_code)) +
+  geom_point() +
+  scale_colour_discrete(name = "Call Type",
+                        labels = c("Red Breasted Robin call", "Red Breasted Robin song")) +
+  theme_classic()
+```
+```{r, echo=FALSE, results=FALSE, warning=FALSE, message=FALSE}
+library(tuneR)
+library(vegan)
+library(ggplot2)
+library(seewave)
+source("nes8010.R")
+
+robin_mfcc <- MFCCFunction(input.dir = "robin_audio",
+                               max.freq=7000)
+
+robin_pca <- ordi_pca(robin_mfcc[, -1], scale=TRUE)
+summary(robin_pca)
+
+robin_sco <- ordi_scores(robin_pca, display="sites")
+robin_sco <- mutate(robin_sco, group_code = robin_mfcc$Class)
+
+ggplot(robin_sco, aes(x=PC1, y=PC2, colour=group_code)) +
+  geom_point() +
+  scale_colour_discrete(name = "Call Type",
+                        labels = c("Red Breasted Robin call", "Red Breasted Robin song")) +
+  theme_classic()
+```
+
+## Part 2
+### Section 1 
+
+In Part 2 of the analysis, the robin call was then compared with the calls of two other common garden birds found in the United Kingdom, the house sparrow (_Passer domesticus_) and the coal tit (_Periparus ater_). Similarly to Part 1: Section 1,the calls of both these birds were downloaded, saved into appropriate folders and converted into .WAV files. 
+
+### Section 2 
+
+Using the oscillo() function, call waves of both these bird species were then visualised and compared to that of the robin call shown in Part 1.The following figures show the full call wave of a House sparrow and a small section of the call wave from 0.59-0.60.  
+
+```{r, echo = FALSE}
+
+library(tuneR)
+library(seewave)
+
+sparrow_wav<- readWave("birds_audio/Passerdomesticus-call_208481.wav")
+oscillo(sparrow_wav)
+oscillo(sparrow_wav, from = 0.59, to = 0.60)
+```
+
+The following figures show the full call wave of a Coal Tit and a small section of the call wave from 0.59-0.60. 
+
+```{r, echo = FALSE}
+
+library(tuneR)
+library(seewave)
+
+coal_wav<- readWave("birds_audio/Periparusater-call_307342.wav")
+oscillo(coal_wav)
+oscillo(coal_wav, from = 0.59, to = 0.60)
+```
+
+### Section 3 
+
+The data was then pushed through a MFCC and a PCA was subsequently run on the data, this was carried out in the same way as previously shown in Part 1: Section 3. 
+
+```
+birds_mfcc <- MFCCFunction(input.dir = "birds_audio",
+                           max.freq=7000)
+
+birds_pca <- ordi_pca(birds_mfcc[, -1], scale=TRUE)
+summary(birds_pca)
+
+birds_sco <- ordi_scores(birds_pca, display="sites")
+birds_sco <- mutate(birds_sco, group_code = birds_mfcc$Class)
+
+ggplot(birds_sco, aes(x=PC1, y=PC2, colour=group_code)) +
+  geom_point() +
+  scale_colour_discrete(name = "Bird Type",
+                      labels = c("Red Breasted Robin", "House Sparrow", "Coal Tit")) +
+  theme_classic()
+```
+
+```{r, echo=FALSE, results=FALSE, warning=FALSE, message=FALSE}
+
+birds_mfcc <- MFCCFunction(input.dir = "birds_audio",
+                           max.freq=7000)
+
+birds_pca <- ordi_pca(birds_mfcc[, -1], scale=TRUE)
+summary(birds_pca)
+
+birds_sco <- ordi_scores(birds_pca, display="sites")
+birds_sco <- mutate(birds_sco, group_code = birds_mfcc$Class)
+
+ggplot(birds_sco, aes(x=PC1, y=PC2, colour=group_code)) +
+  geom_point() +
+  scale_colour_discrete(name = "Bird Type",
+                      labels = c("Red Breasted Robin", "House Sparrow", "Coal Tit")) +
+  theme_classic()
+```
+
+## Part 3 
+### Section 1 
+
+Out of interest, this section explores the variation in the songs of Old World Flycatchers, focusing on the Subfamily _Erithacinae_. This analysis included the European Robin, the Cape Robin-chat (_Cossypha caffra_), the Spotted Palm Thrush (_Cichladusa guttata_) and the Forest Robin (_Stiphrornis erythrothorax_). While the European Robin is found in the United Kingdoom, the other 3 species are found in various African countries such as South Africa, Kenya and areas of Central Africa. Similarly to Part 1: Section 1,the songs of these birds were downloaded, saved into appropriate folders and converted into .WAV files. 
+
+### Section 2
+
+Using the oscillo() function, call waves of these bird species were then visualised and compared to that of the robin call shown in Part 1. The following figures show the full call wave of a Cape Robin-chat and a small section of the call wave from 0.59-0.60.  
+
+```{r, echo = FALSE}
+crobin_wav<- readWave("erithacinae_audio/Cossyphacaffra-call_324664.wav")
+oscillo(crobin_wav)
+oscillo(crobin_wav, from = 0.59, to = 0.60)
+```
+
+The following figures show the full call wave of a Spotted Palm Thrush and a small section of the call wave from 0.59-0.60.
+
+```{r, echo = FALSE}
+palm_wav<- readWave("erithacinae_audio/Cichladusaguttata-call_371366.wav")
+oscillo(palm_wav)
+oscillo(palm_wav, from = 0.59, to = 0.60)
+```
+
+The following figures show the full call wave of a Forest Robin and a small section of the call wave from 0.59-0.60.
+
+```{r, echo = FALSE}
+forest_wav<- readWave("erithacinae_audio/Stiphrorniserythrothorax-call_284893.wav")
+oscillo(forest_wav)
+oscillo(forest_wav, from = 0.59, to = 0.60)
+```
+
+### Section 3 
+
+The data was then pushed through a MFCC and a PCA was subsequently run on the data, this was carried out in the same way as previously shown in Part 1: Section 3. 
+
+```
+erithacinae_mfcc <- MFCCFunction(input.dir = "erithacinae_audio",
+                           max.freq=7000)
+dim(erithacinae_mfcc)
+
+erithacinae_pca <- ordi_pca(erithacinae_mfcc[, -1], scale=TRUE)
+summary(erithacinae_pca)
+
+erith_sco <- ordi_scores(erithacinae_pca, display="sites")
+erith_sco <- mutate(erith_sco, group_code = erithacinae_mfcc$Class)
+
+ggplot(erith_sco, aes(x=PC1, y=PC2, colour=group_code)) +
+  geom_point() +
+  scale_colour_discrete(name = "Bird Type",
+                        labels = c("Spotted Palm Thrush", "Cape Robin-chat", "Red Breasted Robin", "Forest Robin")) +
+  theme_classic()
+```
+```{r, echo=FALSE, results=FALSE, warning=FALSE, message=FALSE}
+erithacinae_mfcc <- MFCCFunction(input.dir = "erithacinae_audio",
+                           max.freq=7000)
+dim(erithacinae_mfcc)#reduced to 178 components
+
+#PCA of sub-family Erithacinae bird songs 
+erithacinae_pca <- ordi_pca(erithacinae_mfcc[, -1], scale=TRUE)
+summary(erithacinae_pca)
+
+erith_sco <- ordi_scores(erithacinae_pca, display="sites")
+erith_sco <- mutate(erith_sco, group_code = erithacinae_mfcc$Class)
+
+#Plot the generated scores using ggplot - adding labels to specify bird type
+ggplot(erith_sco, aes(x=PC1, y=PC2, colour=group_code)) +
+  geom_point() +
+  scale_colour_discrete(name = "Bird Type",
+                        labels = c("Spotted Palm Thrush", "Cape Robin-chat", "Red Breasted Robin", "Forest Robin")) +
+  theme_classic()
+```
+ 
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
